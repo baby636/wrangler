@@ -27,6 +27,7 @@ pub fn dev(
     local_protocol: Protocol,
     upstream_protocol: Protocol,
     verbose: bool,
+    inspect: bool,
 ) -> Result<()> {
     // before serving requests we must first build the Worker
     build_target(&target)?;
@@ -78,6 +79,7 @@ pub fn dev(
                 local_protocol,
                 upstream_protocol,
                 verbose,
+                inspect,
             );
         }
 
@@ -95,5 +97,5 @@ pub fn dev(
         anyhow::bail!("wrangler dev does not yet support unauthenticated sessions when using Durable Objects. Please run wrangler login or wrangler config first.")
     }
 
-    gcs::dev(target, server_config, local_protocol, verbose)
+    gcs::dev(target, server_config, local_protocol, verbose, inspect)
 }

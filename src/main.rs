@@ -84,6 +84,7 @@ fn run() -> Result<()> {
             port,
             local_protocol,
             upstream_protocol,
+            inspect,
         } => exec::dev(
             host,
             ip,
@@ -91,6 +92,7 @@ fn run() -> Result<()> {
             local_protocol,
             upstream_protocol,
             &cli_params,
+            inspect,
         ),
         Command::Whoami => exec::whoami(),
         Command::Publish {

@@ -175,6 +175,10 @@ pub enum Command {
         /// but can be set to http
         #[structopt(name = "upstream-protocol")]
         upstream_protocol: Option<Protocol>,
+
+        /// Inspect the worker in Chrome devtools
+        #[structopt(long)]
+        inspect: bool,
     },
 
     /// Publish your worker to the orange cloud

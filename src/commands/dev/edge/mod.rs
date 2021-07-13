@@ -24,6 +24,7 @@ pub fn dev(
     local_protocol: Protocol,
     upstream_protocol: Protocol,
     verbose: bool,
+    inspect: bool,
 ) -> Result<()> {
     let session = Session::new(&target, &user, &deploy_target)?;
     let mut target = target;
@@ -56,7 +57,7 @@ pub fn dev(
 
     let runtime = TokioRuntime::new()?;
     runtime.block_on(async {
-        let devtools_listener = tokio::spawn(socket::listen(session.websocket_url));
+        let devtools_listener = tokio::spawn(socket::listen(session.websocket_url, server_config.clone(), inspect));
         let server = match local_protocol {
             Protocol::Https => tokio::spawn(server::https(
                 server_config.clone(),
