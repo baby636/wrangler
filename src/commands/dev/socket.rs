@@ -34,8 +34,9 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
     loop {
         if inspect {
             // Startup the edge isolate.
-            let scheme = if server_config.host.is_https() { "https" } else { "http" };
-            connect_retry(|| reqwest::get(format!("{}://{}", scheme, server_config.listening_address))).await;
+            // TODO: does this need to be https in some cases?
+            // let scheme = if server_config.host.is_https() { "https" } else { "http" };
+            connect_retry(|| reqwest::get(format!("http://{}", server_config.listening_address))).await;
         }
         let ws_stream = connect_retry(|| connect_async(&socket_url)).await.0;
 
@@ -57,9 +58,15 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
         // every 10 seconds, send a keep alive message on the channel
         let heartbeat = keep_alive(keep_alive_tx);
 
+        // when the keep alive channel receives a message from the
+        // heartbeat future, write it to the websocket
+        let keep_alive_to_ws = UnboundedReceiverStream::new(keep_alive_rx)
+            .map(Ok)
+            .forward(write)
+            .map_err(Into::into);
+
         // parse all incoming messages and print them to stdout
         if inspect {
-
             StdErr::help("Open chrome://inspect, click 'Configure', and add localhost:9230");
             // Construct our SocketAddr to listen on...
             let addr = SocketAddr::from(([127, 0, 0, 1], 9230));
@@ -74,16 +81,13 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
             });
 
             // Then bind and serve indefinitely.
-            let server = Server::bind(&addr).serve(make_service);
-            server.await?;
+            let server = Server::bind(&addr).serve(make_service).map_err(Into::into);
+            // run the heartbeat and message printer in parallel
+            if tokio::try_join!(heartbeat, keep_alive_to_ws, server).is_ok() {
+                break Ok(());
+            } else {
+            }
         } else {
-            // when the keep alive channel receives a message from the
-            // heartbeat future, write it to the websocket
-            let keep_alive_to_ws = UnboundedReceiverStream::new(keep_alive_rx)
-                .map(Ok)
-                .forward(write)
-                .map_err(Into::into);
-
             let printer = print_ws_messages(read);
 
             // run the heartbeat and message printer in parallel
