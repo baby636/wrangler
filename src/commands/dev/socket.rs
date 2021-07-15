@@ -73,11 +73,18 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
 
             // And a MakeService to handle each connection...
             use hyper::service::{make_service_fn, service_fn};
+            use rand::Rng;
+            let random_bytes = rand::thread_rng().gen();
+            let UUID = uuid::Builder::from_bytes(random_bytes)
+                .set_variant(uuid::Variant::RFC4122)
+                .set_version(uuid::Version::Random)
+                .build();
+
             let make_service = make_service_fn(|_conn| {
                 let socket_url = socket_url.clone();
                 let listening_address = server_config.listening_address.to_string();
                 async move {
-                    Ok::<_, Infallible>(service_fn(move |req| devtools_http_request(req, socket_url.clone(), listening_address.clone())))
+                    Ok::<_, Infallible>(service_fn(move |req| devtools_http_request(req, socket_url.clone(), listening_address.clone(), UUID)))
                 }
             });
 
@@ -100,7 +107,7 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
     }
 }
 
-async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_address: String) -> Result<Response<Body>> {
+async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_address: String, uuid: uuid::Uuid) -> Result<Response<Body>> {
     let path = req.uri().path();
     if path == "/json/version" {
         // TODO: get actual version from remote
@@ -108,7 +115,8 @@ async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_add
         return Response::builder().body(VERSION.into()).map_err(Into::into);
     } else if path == "/json" || path == "/json/list" {
         // TODO: lmao this is so bad
-        const UUID: &str = "9a1d6769-592a-4791-9f3f-6e556ba1bcf1";
+        // const UUID: &str = "9a1d6769-592a-4791-9f3f-6e556ba1bcf1";
+        // let UUID = uuid::Builder;
             // "faviconUrl": "https://nodejs.org/static/images/favicons/favicon.ico",
         let mut scheme = format!("{}:", remote_ws.scheme());
         let mut url = &remote_ws.as_str()[scheme.len()..]; // note: also strips colon
@@ -124,9 +132,10 @@ async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_add
             "title": "wrangler[{pid}]",
             "type": "node",
             "url": "http://{local_address}",
+            "faviconUrl": "https://workers.cloudflare.com/resources/logo/logo.svg",
             "webSocketDebuggerUrl": "{scheme}{url}"
           }} ]
-        "#, uuid = UUID, pid = std::process::id(), url = url, scheme = scheme, local_address = listening_address);
+        "#, uuid = uuid, pid = std::process::id(), url = url, scheme = scheme, local_address = listening_address);
 
         log::debug!("sending json description for {} back:{}", url, devtools_info);
         return Response::builder().body(devtools_info.into()).map_err(Into::into);
