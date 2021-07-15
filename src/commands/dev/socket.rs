@@ -75,8 +75,9 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
             use hyper::service::{make_service_fn, service_fn};
             let make_service = make_service_fn(|_conn| {
                 let socket_url = socket_url.clone();
+                let listening_address = server_config.listening_address.to_string();
                 async move {
-                    Ok::<_, Infallible>(service_fn(move |req| devtools_http_request(req, socket_url.clone())))
+                    Ok::<_, Infallible>(service_fn(move |req| devtools_http_request(req, socket_url.clone(), listening_address.clone())))
                 }
             });
 
@@ -99,7 +100,7 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
     }
 }
 
-async fn devtools_http_request(req: Request<Body>, remote_ws: Url) -> Result<Response<Body>> {
+async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_address: String) -> Result<Response<Body>> {
     let path = req.uri().path();
     if path == "/json/version" {
         // TODO: get actual version from remote
@@ -122,10 +123,10 @@ async fn devtools_http_request(req: Request<Body>, remote_ws: Url) -> Result<Res
             "id": "{uuid}",
             "title": "wrangler[{pid}]",
             "type": "node",
-            "url": "devtools://devtools/bundled/js_app.html?wss={url}&experiments=true&v8only=true",
+            "url": "http://{local_address}",
             "webSocketDebuggerUrl": "{scheme}{url}"
           }} ]
-        "#, uuid = UUID, pid = std::process::id(), url = url, scheme = scheme);
+        "#, uuid = UUID, pid = std::process::id(), url = url, scheme = scheme, local_address = listening_address);
 
         log::debug!("sending json description for {} back:{}", url, devtools_info);
         return Response::builder().body(devtools_info.into()).map_err(Into::into);
