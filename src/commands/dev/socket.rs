@@ -67,7 +67,13 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
 
         // parse all incoming messages and print them to stdout
         if inspect {
-            StdErr::help("Open chrome://inspect, click 'Configure', and add localhost:9230");
+            // StdErr::help("Open chrome://inspect, click 'Configure', and add localhost:9230");
+            let mut url = &socket_url.as_str()[socket_url.scheme().len() + 1..]; // note: also strips colon
+            if socket_url.has_authority() {
+                url = &url[2..];
+            }
+            StdErr::help(&format!("Open devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&wss={url} in Chrome", url=url));
+
             // Construct our SocketAddr to listen on...
             let addr = SocketAddr::from(([127, 0, 0, 1], 9230));
 
@@ -108,29 +114,35 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
 }
 
 async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_address: String, uuid: uuid::Uuid) -> Result<Response<Body>> {
+    let mut scheme = format!("{}:", remote_ws.scheme());
+    let mut url = &remote_ws.as_str()[scheme.len()..]; // note: also strips colon
+    if remote_ws.has_authority() {
+        url = &url[2..];
+        scheme.push_str("//");
+    }
+
     let path = req.uri().path();
     if path == "/json/version" {
         // TODO: get actual version from remote
-        const VERSION: &str = r#"{"Browser": "node.js/v15.3.0", "Protocol-Version": "1.3"}"#;
-        return Response::builder().body(VERSION.into()).map_err(Into::into);
+        let version = format!(r#"{{
+            "Browser": "node.js/v15.3.0", "Protocol-Version": "1.3",
+            "webSocketDebuggerUrl": "{scheme}{url}",
+        }}"#, scheme=scheme, url=url);
+        return Response::builder().body(version.into()).map_err(Into::into);
     } else if path == "/json" || path == "/json/list" {
         // TODO: lmao this is so bad
         // const UUID: &str = "9a1d6769-592a-4791-9f3f-6e556ba1bcf1";
         // let UUID = uuid::Builder;
             // "faviconUrl": "https://nodejs.org/static/images/favicons/favicon.ico",
-        let mut scheme = format!("{}:", remote_ws.scheme());
-        let mut url = &remote_ws.as_str()[scheme.len()..]; // note: also strips colon
-        if remote_ws.has_authority() {
-            url = &url[2..];
-            scheme.push_str("//");
-        }
+            // "type": "service-worker"
         let devtools_info = format!(r#"
         [ {{
             "description": "wrangler dev --inspect instance",
             "devtoolsFrontendUrl": "devtools://devtools/bundled/js_app.html?experiments=true&v8only=true&wss={url}",
+            "devtoolsFrontendUrlCompat": "devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&wss={url}",
             "id": "{uuid}",
-            "title": "wrangler[{pid}]",
             "type": "node",
+            "title": "wrangler[{pid}]",
             "url": "http://{local_address}",
             "faviconUrl": "https://workers.cloudflare.com/resources/logo/logo.svg",
             "webSocketDebuggerUrl": "{scheme}{url}"
@@ -140,7 +152,7 @@ async fn devtools_http_request(req: Request<Body>, remote_ws: Url, listening_add
         log::debug!("sending json description for {} back:{}", url, devtools_info);
         return Response::builder().body(devtools_info.into()).map_err(Into::into);
     }
-    log::debug!("inspect: unknown request URL {}", req.uri());
+    eprintln!("inspect: unknown request URL {}", req.uri());
     Response::builder().status(StatusCode::NOT_FOUND).body("".into()).map_err(Into::into)
 }
 
