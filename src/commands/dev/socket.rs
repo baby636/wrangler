@@ -50,21 +50,6 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
         let enable_runtime = tungstenite::protocol::Message::Text(enable_runtime);
         write.send(enable_runtime).await?;
 
-        // if left unattended, the preview service will kill the socket
-        // that emits console messages
-        // send a keep alive message every so often in the background
-        let (keep_alive_tx, keep_alive_rx) = mpsc::unbounded_channel();
-
-        // every 10 seconds, send a keep alive message on the channel
-        let heartbeat = keep_alive(keep_alive_tx);
-
-        // when the keep alive channel receives a message from the
-        // heartbeat future, write it to the websocket
-        let keep_alive_to_ws = UnboundedReceiverStream::new(keep_alive_rx)
-            .map(Ok)
-            .forward(write)
-            .map_err(Into::into);
-
         // parse all incoming messages and print them to stdout
         if inspect {
             // StdErr::help("Open chrome://inspect, click 'Configure', and add localhost:9230");
@@ -95,13 +80,28 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
             });
 
             // Then bind and serve indefinitely.
-            let server = Server::bind(&addr).serve(make_service).map_err(Into::into);
+            let server = Server::bind(&addr).serve(make_service);
             // run the heartbeat and message printer in parallel
-            if tokio::try_join!(heartbeat, keep_alive_to_ws, server).is_ok() {
+            if server.await.is_ok() {
                 break Ok(());
             } else {
             }
         } else {
+            // if left unattended, the preview service will kill the socket
+            // that emits console messages
+            // send a keep alive message every so often in the background
+            let (keep_alive_tx, keep_alive_rx) = mpsc::unbounded_channel();
+
+            // every 10 seconds, send a keep alive message on the channel
+            let heartbeat = keep_alive(keep_alive_tx);
+
+            // when the keep alive channel receives a message from the
+            // heartbeat future, write it to the websocket
+            let keep_alive_to_ws = UnboundedReceiverStream::new(keep_alive_rx)
+                .map(Ok)
+                .forward(write)
+                .map_err(Into::into);
+
             let printer = print_ws_messages(read);
 
             // run the heartbeat and message printer in parallel
