@@ -36,6 +36,9 @@ pub async fn listen(socket_url: Url, server_config: ServerConfig, inspect: bool)
             // Startup the edge isolate.
             // TODO: does this need to be https in some cases?
             // let scheme = if server_config.host.is_https() { "https" } else { "http" };
+
+            // Sleep for a bit first to give the webserver time to start up.
+            tokio::time::sleep(Duration::from_millis(200)).await;
             connect_retry(|| reqwest::get(format!("http://{}", server_config.listening_address))).await;
         }
         let ws_stream = connect_retry(|| connect_async(&socket_url)).await.0;
