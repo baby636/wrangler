@@ -19,7 +19,6 @@ pub mod login;
 pub mod reporter;
 pub mod settings;
 pub mod sites;
-pub mod tail;
 pub mod terminal;
 pub mod upload;
 pub mod version;
